@@ -1,0 +1,8 @@
+{
+  "name": "pii-mask",
+  "version": "0.1.0",
+  "description": "個資去識別化：把手機、身分證、Email、地址等換成代號再送給模型，對照表只留在本機；/pii 開關與查看",
+  "author": {
+    "name": "Ting Jia"
+  }
+}
