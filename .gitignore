@@ -1,0 +1,17 @@
+# Claude Code 載入 mod 時自動產生的型別檔，每個版本都不同
+.claude-plugin/types/
+
+# 通知小程式是編譯產物，用 ding-dong/notifier/build.sh 重新產生
+ding-dong/notifier/DingDong.app/
+
+# 每次發通知時寫入的暫存訊息，內容含專案資料夾名稱
+ding-dong/notifier/message.txt
+
+# 專案各自的階段設定與本機設定不屬於這個 repo
+.claude/
+.env
+.env.*
+!.env.example
+
+.DS_Store
+node_modules/

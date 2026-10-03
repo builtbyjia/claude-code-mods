@@ -1,0 +1,8 @@
+{
+  "name": "secret-guard",
+  "version": "0.1.0",
+  "description": "金鑰守門：遮蔽 prompt 和工具輸出裡的 API key，並擋下讀寫 .env、私鑰這類檔案；/guard 看狀態",
+  "author": {
+    "name": "Ting Jia"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "ding-dong",
+  "version": "0.1.0",
+  "description": "回合跑超過一分鐘才結束時，發一則可愛的 macOS 通知叫你回來；/ding 可以預覽",
+  "author": {
+    "name": "Ting Jia"
+  }
+}

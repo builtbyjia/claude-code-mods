@@ -1,0 +1,26 @@
+{
+  "name": "builtbyjia-mods",
+  "owner": {
+    "name": "Ting Jia"
+  },
+  "metadata": {
+    "description": "自製的 Claude Code mods：長回合通知、階段進程視覺化、金鑰守門"
+  },
+  "plugins": [
+    {
+      "name": "ding-dong",
+      "source": "./ding-dong",
+      "description": "回合跑超過一分鐘才結束時，發一則 macOS 通知叫你回來"
+    },
+    {
+      "name": "ship-it",
+      "source": "./ship-it",
+      "description": "用 /ship 依序跑專案的階段，並在 pane 裡顯示跑到哪一步"
+    },
+    {
+      "name": "secret-guard",
+      "source": "./secret-guard",
+      "description": "遮蔽 prompt 和工具輸出裡的金鑰，並擋下讀寫 .env、私鑰這類檔案"
+    }
+  ]
+}
