@@ -1,7 +1,7 @@
 {
   "name": "ship-it",
   "version": "0.1.0",
-  "description": "用 /ship 依序跑專案的階段（檢查、測試、打包、部署），並在 pane 裡用橘色吉祥物顯示跑到哪一步",
+  "description": "用 /ship 依序跑專案的階段（檢查、測試、打包、部署），並在 prompt 上方的深色面板用橘色吉祥物顯示跑到哪一步",
   "author": {
     "name": "Ting Jia"
   }

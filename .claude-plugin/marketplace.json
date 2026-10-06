@@ -15,7 +15,7 @@
     {
       "name": "ship-it",
       "source": "./ship-it",
-      "description": "用 /ship 依序跑專案的階段，並在 pane 裡顯示跑到哪一步"
+      "description": "用 /ship 依序跑專案的階段，並在 prompt 上方的面板顯示跑到哪一步"
     },
     {
       "name": "secret-guard",

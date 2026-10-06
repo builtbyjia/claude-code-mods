@@ -1,11 +1,18 @@
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-const PANE = 'ship-it'
 // 每個專案自己的階段設定檔，放在專案根目錄下
 const CONFIG_PATH = '.claude/ship.json'
 const TICK_MS = 250
 const STAGE_TIMEOUT_MS = 10 * 60 * 1000
-const CORAL = '#D97757'
+
+// 深色面板的配色。固定用色碼，不管終端機是淺色還是深色主題，看起來都一樣
+const PANEL = '#2B2F3B'
+const INK = '#E6E8EC'
+const MUTED = '#7D8494'
+const GREEN = '#4CC38A'
+const YELLOW = '#E5C07B'
+const RED = '#F47067'
+const CORAL = '#E8806A'
 
 type StageDef = { name: string; run: string }
 type Stage = StageDef & { status: 'waiting' | 'running' | 'done' | 'failed'; ms: number }
@@ -19,7 +26,7 @@ type Run = {
   tail: string[]
 }
 type Found = { stages: StageDef[]; source: string; problem?: string }
-type Span = { text: string; color?: string; dim?: boolean; bold?: boolean }
+type Span = { text: string; color?: string; bold?: boolean }
 
 // 吉祥物：上面兩列是頭和身體，腳有兩格動畫輪流換
 const SPRITE_BODY = ['▄█▀████▀█▄', '▀████████▀']
@@ -29,6 +36,10 @@ const SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 // 軌道左邊留白讓吉祥物能站在第一個節點正上方，右邊留給最後一個標籤
 const MARGIN = 4
 const LAST_LABEL = 12
+// 面板左右的內距，以及面板寬度的上下限
+const PAD = 2
+const MIN_WIDTH = 30
+const MAX_WIDTH = 110
 
 const DEMO: readonly StageDef[] = [
   { name: '檢查程式碼', run: 'sleep 2' },
@@ -56,6 +67,8 @@ const HELP = [
 let run: Run | null = null
 let ticker: Timer | null = null
 let lastArgs = ''
+// 按了「關」之後先收起來，下次 /ship 再出現
+let isHidden = false
 
 function isStageDef(value: unknown): value is StageDef {
   const stage = value as StageDef | null
@@ -210,8 +223,9 @@ async function start($: EngineInterface, args: string): Promise<string> {
     mine.frame += 1
     $.ui.invalidate('ui.render')
   })
-  await $.ui.open({ id: PANE, title: '進程', rows: 12 })
-  // 不等它跑完：指令先回覆，階段在背景繼續，pane 會跟著更新
+  isHidden = false
+  $.ui.invalidate('ui.render')
+  // 不等它跑完：指令先回覆，階段在背景繼續，面板會跟著更新
   void work($, mine, cwd)
 
   return `開始跑 ${mine.stages.length} 個階段（來源：${mine.source}）：${mine.stages.map(stage => stage.name).join(' → ')}`
@@ -271,16 +285,16 @@ function timer(ms: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-function colorOf(stage: Stage): Span {
+function toneOf(stage: Stage): Span {
   if (stage.status === 'done') {
-    return { text: '', color: 'green' }
+    return { text: '', color: GREEN }
   }
 
   if (stage.status === 'running') {
-    return { text: '', color: 'yellow', bold: true }
+    return { text: '', color: YELLOW, bold: true }
   }
 
-  return stage.status === 'failed' ? { text: '', color: 'red', bold: true } : { text: '', dim: true }
+  return stage.status === 'failed' ? { text: '', color: RED, bold: true } : { text: '', color: MUTED }
 }
 
 function markOf(now: Run, stage: Stage): string {
@@ -297,20 +311,20 @@ function markOf(now: Run, stage: Stage): string {
 
 function headlineOf(now: Run): Span {
   if (now.outcome === 'done') {
-    return { text: '✓ 全部完成', color: 'green', bold: true }
+    return { text: '✓ 全部完成', color: INK, bold: true }
   }
 
   const stage = now.stages.find(one => one.status === 'running' || one.status === 'failed')
 
   return now.outcome === 'failed'
-    ? { text: `✗ ${stage?.name ?? ''} 失敗`, color: 'red', bold: true }
-    : { text: `▶ 進行中：${stage?.name ?? ''}`, bold: true }
+    ? { text: `✗ ${stage?.name ?? ''} 失敗`, color: RED, bold: true }
+    : { text: `▶ 進行中：${stage?.name ?? ''}`, color: INK, bold: true }
 }
 
-function spriteRows(left: number, frame: number, isDim: boolean): Span[][] {
+function spriteRows(left: number, frame: number, isSad: boolean): Span[][] {
   const rows = [...SPRITE_BODY, SPRITE_LEGS[frame % SPRITE_LEGS.length]]
 
-  return rows.map(row => [{ text: ' '.repeat(left) + row, color: CORAL, dim: isDim }])
+  return rows.map(row => [{ text: ' '.repeat(left) + row, color: isSad ? MUTED : CORAL }])
 }
 
 // 寬的版面：一條橫向軌道，每個階段一個節點，吉祥物走向正在跑的那個節點
@@ -331,7 +345,7 @@ function trackRows(now: Run, width: number, gap: number): Span[][] {
   now.stages.forEach((stage, index) => {
     const isLast = index === count - 1
     const cell = isLast ? LAST_LABEL : gap
-    const tone = colorOf(stage)
+    const tone = toneOf(stage)
 
     track.push({ ...tone, text: stage.status === 'waiting' ? '○' : stage.status === 'failed' ? '✗' : '●' })
     labels.push({ ...tone, text: fit(stage.name, cell - 1) + ' ' })
@@ -345,50 +359,80 @@ function trackRows(now: Run, width: number, gap: number): Span[][] {
     const ahead = now.stages[index + 1]
 
     if (ahead.status === 'done') {
-      track.push({ text: '━'.repeat(gap - 1), color: 'green' })
+      track.push({ text: '━'.repeat(gap - 1), color: GREEN })
     } else if (ahead.status === 'waiting') {
-      track.push({ text: '─'.repeat(gap - 1), dim: true })
+      track.push({ text: '─'.repeat(gap - 1), color: MUTED })
     } else {
-      track.push({ text: '━'.repeat(filled), color: ahead.status === 'failed' ? 'red' : 'yellow' })
-      track.push({ text: '─'.repeat(gap - 1 - filled), dim: true })
+      track.push({ text: '━'.repeat(filled), color: ahead.status === 'failed' ? RED : YELLOW })
+      track.push({ text: '─'.repeat(gap - 1 - filled), color: MUTED })
     }
   })
 
-  return [...spriteRows(left, isWalking ? now.frame : 0, now.outcome === 'failed'), track, labels, marks]
+  return [...spriteRows(left, isWalking ? now.frame : 0, now.outcome === 'failed'), [], track, labels, marks]
 }
 
-// 窄的版面（例如 pane 停靠在側邊）：吉祥物在上，階段直向列出
-function listRows(now: Run, width: number): Span[][] {
+// 窄的版面（終端機很窄時）：吉祥物在上，階段直向列出
+function listRows(now: Run): Span[][] {
   const isWalking = now.outcome === 'running'
 
   return [
-    ...spriteRows(1, isWalking ? now.frame : 0, now.outcome === 'failed'),
+    ...spriteRows(MARGIN, isWalking ? now.frame : 0, now.outcome === 'failed'),
+    [],
     ...now.stages.map(stage => {
       const mark = stage.status === 'waiting' ? '○' : markOf(now, stage)
 
-      return [{ ...colorOf(stage), text: fit(`${fit(mark, 7)} ${stage.name}`, width) }]
+      return [{ text: ' '.repeat(MARGIN) }, { ...toneOf(stage), text: `${fit(mark, 7)} ${stage.name}` }]
     }),
   ]
 }
 
-function draw(now: Run, columns: number): Span[][] {
-  const width = Math.max(24, Math.min(columns - 2, 96))
+// 把一列補到剛好 width 格：左右各留 PAD，中間不足的用空白填。
+// 每一列都一樣寬，面板才會是一塊完整的深色矩形
+function padded(spans: readonly Span[], width: number): Span[] {
+  const inner = width - PAD * 2
+  const kept: Span[] = []
+  let used = 0
+
+  for (const span of spans) {
+    const text = fit(span.text, Math.max(0, Math.min(cellsOf(span.text), inner - used)))
+
+    if (text !== '') {
+      kept.push({ ...span, text })
+      used += cellsOf(text)
+    }
+  }
+
+  return [{ text: ' '.repeat(PAD) }, ...kept, { text: ' '.repeat(inner - used + PAD) }]
+}
+
+// 回傳面板的寬度、標題列（右邊要留位置給按鈕）和其餘各列
+function draw(now: Run, columns: number, buttonCells: number): { width: number; head: Span[]; rows: Span[][] } {
+  const width = Math.max(MIN_WIDTH, Math.min(columns, MAX_WIDTH))
+  const inner = width - PAD * 2
   const count = now.stages.length
   const finished = now.stages.filter(stage => stage.status === 'done').length
   const total = now.outcome === 'running' ? now.elapsedMs : now.stages.reduce((sum, stage) => sum + stage.ms, 0)
-  const counter = `${finished}/${count}  ${timer(total)}`
+  const counter = `${finished}/${count}  ${timer(total)}  `
   const headline = headlineOf(now)
-  const gap = count > 1 ? Math.floor((width - MARGIN - LAST_LABEL) / (count - 1)) : 0
-  const body = count > 1 && gap >= 9 ? trackRows(now, width, gap) : listRows(now, width)
+  const gap = count > 1 ? Math.floor((inner - MARGIN - LAST_LABEL) / (count - 1)) : 0
+  const body = count > 1 && gap >= 9 ? trackRows(now, inner, gap) : listRows(now)
+  const headRoom = Math.max(0, inner - buttonCells - MARGIN - cellsOf(counter))
 
-  const rows: Span[][] = [
-    [{ ...headline, text: fit(headline.text, width - cellsOf(counter)) }, { text: counter, dim: true }],
-    ...body,
-    ...now.tail.map(line => [{ text: fit(line, width), color: 'red', dim: true }]),
-  ]
-
-  // 空字串的片段不畫
-  return rows.map(spans => spans.filter(span => span.text !== ''))
+  return {
+    width,
+    head: [
+      { text: ' '.repeat(PAD + MARGIN) },
+      { ...headline, text: fit(headline.text, headRoom) },
+      { text: counter, color: INK },
+    ],
+    rows: [
+      [],
+      ...body,
+      ...(now.tail.length > 0 ? [[]] : []),
+      ...now.tail.map(line => [{ text: ' '.repeat(MARGIN) }, { text: line, color: RED }]),
+      [],
+    ].map(spans => padded(spans, width)),
+  }
 }
 
 export const register: Register = on => {
@@ -407,42 +451,37 @@ export const register: Register = on => {
     return { text: args === 'init' ? await init($) : await start($, args) }
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
-
-    if (run === null) {
-      return Text({ dimColor: true, children: '還沒跑過，輸入 /ship 開始。' })
+  // 畫在 prompt 正上方的橫條裡，寬度就是整個終端機，所以軌道一定是橫的
+  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
+    if (run === null || isHidden || e.props.hasSurvey) {
+      return next(e)
     }
 
+    const { Box, Button, Text } = $.ui.resolve(e)
     const isBusy = run.outcome === 'running'
-    const rows = draw(run, e.props.bodyColumns)
+    // 終端機上的按鈕畫成「[ 文字 ]」，這裡先替它們留好位置
+    const view = draw(run, e.props.bodyColumns, isBusy ? 8 : 18)
+    const textOf = (span: Span, index: number) =>
+      Text({
+        key: `span-${index}`,
+        color: span.color,
+        backgroundColor: PANEL,
+        bold: span.bold,
+        wrap: 'truncate-end',
+        children: span.text,
+      })
 
     return Box({
       flexDirection: 'column',
-      paddingX: 1,
+      width: view.width,
+      backgroundColor: PANEL,
       children: [
-        ...rows.map((spans, row) =>
-          Box({
-            key: `row-${row}`,
-            flexDirection: 'row',
-            children: spans.map((span, index) =>
-              Text({
-                key: `span-${index}`,
-                color: span.color,
-                dimColor: span.dim,
-                bold: span.bold,
-                wrap: 'truncate-end',
-                children: span.text,
-              }),
-            ),
-          }),
-        ),
+        Box({ key: 'top', flexDirection: 'row', children: padded([], view.width).map(textOf) }),
         Box({
-          key: 'buttons',
+          key: 'head',
           flexDirection: 'row',
-          gap: 2,
-          marginTop: 1,
           children: [
+            ...view.head.map(textOf),
             ...(isBusy
               ? []
               : [
@@ -454,17 +493,20 @@ export const register: Register = on => {
                       void start($, lastArgs)
                     },
                   }),
+                  Text({ key: 'between', backgroundColor: PANEL, children: ' ' }),
                 ]),
             Button({
               key: 'close',
-              label: '關閉',
+              label: '關',
               hotkey: 'c',
               onPress: () => {
-                void $.ui.close({ id: PANE })
+                isHidden = true
+                $.ui.invalidate('ui.render')
               },
             }),
           ],
         }),
+        ...view.rows.map((spans, row) => Box({ key: `row-${row}`, flexDirection: 'row', children: spans.map(textOf) })),
       ],
     })
   })
